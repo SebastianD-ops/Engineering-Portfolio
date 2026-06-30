@@ -2,15 +2,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import datetime
 
-#model is ln(A) = -kt + ln(A_0) for first order
-# more generall d[A]/dt = -k[A]
 #examined reaction is CaCO3 + Heat -> CaO + CO2
 
-#0th order -> 0, 1st -> 1, 2nd -> 2
-#0th order linear in A vs t, 1st order linear in ln(A) vs t,
-
-data = pd.read_csv('sample_data.csv')
+data = pd.read_csv('Noisy_First_Order.csv')
 
 
 def calc_least_squares_line(x, y):
@@ -25,7 +21,7 @@ def calc_least_squares_line(x, y):
     m = (n * xy_sum - x_sum * y_sum) / (n * x2_sum - x_sum ** 2)
     b = (y_sum - m * x_sum) / n
 
-    residuals = [data.iloc[i]["Amount"] - m * data.iloc[i]["Time"] + b for i in range(n)]
+    residuals = [y.iloc[i] - (m * x.iloc[i] + b) for i in range(n)]
     residuals_sqr = [residuals[i] ** 2 for i in range(n)]
     sum_residuals = sum(residuals_sqr)
     return m, b, n, sum_residuals
@@ -57,55 +53,92 @@ def calc_correlation_coefficient(x, y):
     return r, R
 
 
-def get_k_values(x, y):
-    if len(x) > len(y):
-        n = len(y)
-    else:
-        n = len(x)
-    # k = -slope
-    k = [-(y[i] - y[i - 1]) / (x[i - 1] - x[i]) for i in range(1, n)]
-    k_mean = sum(k) / n
-    k_minus_mean = [k[i] - k_mean for i in range(len(k))]
-    k_minus_mean_sqr = [k_minus_mean[i] ** 2 for i in range(len(k))]
-    k_std = np.sqrt(sum(k_minus_mean_sqr) / (len(k_minus_mean_sqr) - 1))
-
-    k_CV = abs(k_std * 100 / k_mean)
-
-    return k, k_CV
-
 class Dataset:
     def __init__(self,x,y):
         self.x = x
         self.y = y
+        self.R_vals = []
+        self.sum_r_vals = []
     def test(self,x,y):
         m, b, n, sum_r = calc_least_squares_line(x, y)
         r, R = calc_correlation_coefficient(x, y)
-        k, k_CV = get_k_values(x, y)
 
-        return m,b,n,sum_r,r,R,k,k_CV
+        return m,b,n,sum_r,r,R
     def ZerothTest(self):
-        m,b,n,sum_r,r,R,k,k_CV = self.test(self.x, self.y)
+        m,b,n,sum_r,r,R = self.test(self.x, self.y)
+
+        self.R_vals.append(R)
+        self.sum_r_vals.append(sum_r)
+        self.zerothk = m
+
         plt.scatter(self.x,self.y)
         plt.plot(self.x, [m*self.x[i] + b for i in range(len(self.x))],'r')
-        print(f"0th Order Model shows Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R}, k_CV:{k_CV}")
+        self.ztestline = (f"0th Order Model shows \n --------------------------------- \n  Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R} \n --------------------------------- \n")
+        plt.title("Zeroth Order Reaction")
         plt.show()
     def FirstTest(self,y):
         self.lny = np.log(y[y['Amount'] > 0]['Amount'])
-        m, b, n, sum_r, r, R, k, k_CV = self.test(self.x, self.lny)
+        m, b, n, sum_r, r, R = self.test(self.x, self.lny)
+
+        self.R_vals.append(R)
+        self.sum_r_vals.append(sum_r)
+        self.firstk = m
+
         plt.scatter([self.x[i] for i in range(len(self.lny))], self.lny)
         plt.plot(self.x, [m * self.x[i] + b for i in range(len(self.x))], 'r')
-        print(f"1st Order Model shows Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R}, k_CV:{k_CV}")
+        self.ftestline = (f"1st Order Model shows \n --------------------------------- \n  Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R} \n --------------------------------- \n")
+        plt.title("First Order Reaction")
         plt.show()
     def SecondTest(self,y):
         self.invy = 1/(y[y['Amount'] > 0]['Amount'])
-        m, b, n, sum_r, r, R, k, k_CV = self.test(self.x,self.invy)
+        m, b, n, sum_r, r, R = self.test(self.x,self.invy)
+
+        self.R_vals.append(R)
+        self.sum_r_vals.append(sum_r)
+        self.secondk = m
+
         plt.scatter([self.x[i] for i in range(len(self.invy))], self.invy)
         plt.plot(self.x, [m * self.x[i] + b for i in range(len(self.x))], 'r')
-        print(f"2nd Order Model shows Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R}, k_CV:{k_CV}")
+        self.stestline = (f"2nd Order Model shows \n --------------------------------- \n Gradient:{m}, y-int:{b}, sum of the residuals:{sum_r}, Coefficient of Determination:{R} \n --------------------------------- \n")
+        plt.title("Second Order Reaction")
         plt.show()
+    def BestFit(self):
+        max_R = max(self.R_vals)
+        test_num_r = self.R_vals.index(max_R)
+        min_sum_r = min(self.sum_r_vals)
+        test_num_sum_r = self.sum_r_vals.index(min_sum_r)
+
+        if test_num_r == test_num_sum_r:
+            if test_num_r == 0:
+                type = "Zeroth Order Reaction"
+                k = abs(self.zerok)
+            elif test_num_r == 1:
+                type = "First Order Reaction"
+                k = f"{abs(self.firstk)}/s"
+            elif test_num_r == 2:
+                type = "Second Order Reaction"
+                k = f"{abs(self.secondk)}L/mol/s"
+
+            self.bestfitline = f"\nPredicted Reaction Order: \n     {type} \nEstimated k: \n     {k}"
+        else:
+            self.bestfitline = ("\nInconclusive Results\n")
+    def TestAll(self,y):
+        self.ZerothTest()
+        self.FirstTest(y)
+        self.SecondTest(y)
 
 
-Calcium_Carbonate = Dataset(data["Time"],data["Amount"])
-Calcium_Carbonate.ZerothTest()
-Calcium_Carbonate.FirstTest(data)
-Calcium_Carbonate.SecondTest(data)
+
+if __name__ == "__main__"
+    Calcium_Carbonate = Dataset(data["Time"], data["Amount"])
+    Calcium_Carbonate.TestAll(data)
+    Calcium_Carbonate.BestFit()
+
+    file_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".txt"
+    with open(file_name, 'w') as file:
+        file.write(Calcium_Carbonate.ztestline)
+        file.write(Calcium_Carbonate.ftestline)
+        file.write(Calcium_Carbonate.stestline)
+        file.write(Calcium_Carbonate.bestfitline)
+
+
