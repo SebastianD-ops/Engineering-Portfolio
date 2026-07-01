@@ -129,7 +129,7 @@ class Dataset:
 
 
 
-if __name__ == "__main__"
+if __name__ == "__main__":
     Calcium_Carbonate = Dataset(data["Time"], data["Amount"])
     Calcium_Carbonate.TestAll(data)
     Calcium_Carbonate.BestFit()
